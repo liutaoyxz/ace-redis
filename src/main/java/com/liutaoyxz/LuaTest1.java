@@ -30,7 +30,7 @@ public class LuaTest1 {
     //已经抢到的list
     public static String HAVE_LIST = "HAVELIST";
 
-    public static int THREAD_NUM = 20;
+    public static int THREAD_NUM = 200;
 
     public static Random random = new Random();
 
@@ -85,9 +85,9 @@ public class LuaTest1 {
                 money = randLevel(1, max);
             }
             amount -= money;
-            Map<String,String> map = new HashMap<String, String>();
-            map.put("hid", ""+(i + 1));
-            map.put("money", ""+money);
+            Map<String, String> map = new HashMap<String, String>();
+            map.put("hid", "" + (i + 1));
+            map.put("money", "" + money);
             map.put("uid", "0");
             map.put("known", "0");
             String json = JSON.toJSON(map).toString();
@@ -122,7 +122,7 @@ public class LuaTest1 {
 
     @Test
     public void createHBtt() {
-        LuaTest1.createHB(100, 10);
+        LuaTest1.createHB(10000, 100);
     }
 
 
@@ -131,35 +131,45 @@ public class LuaTest1 {
 
         ExecutorService executorService = Executors.newFixedThreadPool(THREAD_NUM);
         final CountDownLatch latch = new CountDownLatch(THREAD_NUM);
+        final CountDownLatch latchEnd = new CountDownLatch(THREAD_NUM);
         final List<String> hname = new CopyOnWriteArrayList<String>();
         final AtomicInteger amt = new AtomicInteger(0);
         for (int i = 0; i < THREAD_NUM; i++) {
             executorService.execute(new Runnable() {
                 public void run() {
-                    Jedis jedis = new Jedis("192.168.162.128",6379);
+                    Jedis jedis = new Jedis("192.168.162.128", 6379);
                     latch.countDown();
-                    String eval = (String)jedis.eval(HONGBAO_SCRIPT, 4, HONGBAO_LIST, HAVE_LIST, HASH, Thread.currentThread().getName());
-                    if (eval == null){
-                        System.out.println(eval);
-                        return ;
+                    String eval = (String) jedis.eval(HONGBAO_SCRIPT, 4, HONGBAO_LIST, HAVE_LIST, HASH, Thread.currentThread().getName());
+                    if (eval == null) {
+                        latchEnd.countDown();
+                        return;
                     }
                     JSONObject json = JSON.parseObject(eval);
                     String k = json.getString("known");
-                    if (k.equals("1")){
-                        return ;
+                    if (k.equals("1")) {
+                        latchEnd.countDown();
+                        return;
                     }
                     int money = json.getInteger("money");
-                    amt.addAndGet(Integer.valueOf(money));
+                    amt.addAndGet(money);
                     hname.add(Thread.currentThread().getName());
+                    latchEnd.countDown();
                 }
             });
         }
         latch.await();
-        System.out.println("抢到红包的用户有"+hname.size()+"个,用户列表是 --> "+hname);
-        System.out.println("总共抢到了 -->"+amt.get() +"这些钱");
+        latchEnd.await();
+        System.out.println("抢到红包的用户有" + hname.size() + "个,用户列表是 --> " + hname);
+        System.out.println("总共抢到了 -->" + amt.get() + "这些钱");
 
     }
 
+    @Test
+    public void evalTest() {
+        Jedis jedis = new Jedis("192.168.162.128", 6379);
+        String eval = (String) jedis.eval(HONGBAO_SCRIPT, 4, HONGBAO_LIST, HAVE_LIST, HASH, Thread.currentThread().getName());
+        System.out.println(eval);
+    }
 
 
 }
